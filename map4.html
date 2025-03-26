@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa Tijuana - Marcadores en Tiempo Real</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { width: 100%; height: 100vh; }
+        #btnGuardar { 
+            position: fixed; 
+            bottom: 20px; 
+            right: 20px; 
+            z-index: 1000;
+            padding: 10px 15px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <button id="btnGuardar">Guardar Mi Ubicación</button>
+
+    <!-- Firebase y Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-database.js"></script>
+
+    <script>
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBbR-O6hqk9gN2ohQuCCmV-vHiaEGhAL8s",
+            authDomain: "construyecercadeti.firebaseapp.com",
+            databaseURL: "https://construyecercadeti-default-rtdb.firebaseio.com",
+            projectId: "construyecercadeti",
+            storageBucket: "construyecercadeti.appspot.com",
+            messagingSenderId: "888808949632",
+            appId: "1:888808949632:web:677961b72573979c1b6365",
+            measurementId: "G-METG6NS3ZC"
+        };
+
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Inicializar mapa centrado en Tijuana
+        const map = L.map('map').setView([32.5149, -117.0382], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Obtener ID de usuario (simulado para ejemplo)
+        const userId = localStorage.getItem('userId') || 'user_' + Math.random().toString(36).substr(2, 9);
+        localStorage.setItem('userId', userId);
+
+        // Cargar marcadores existentes
+        database.ref('ubicaciones').on('value', (snapshot) => {
+            const data = snapshot.val();
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const ubicacion = data[key];
+                    L.marker([ubicacion.latitud, ubicacion.longitud])
+                        .addTo(map)
+                        .bindPopup(`<b>${ubicacion.nombre || 'Usuario'}</b><br>${new Date(ubicacion.timestamp).toLocaleString()}`);
+                });
+            }
+        });
+
+        // Función para guardar ubicación
+        document.getElementById('btnGuardar').addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const timestamp = Date.now();
+                        
+                        // Guardar en Firebase
+                        database.ref('ubicaciones/' + userId).set({
+                            latitud: lat,
+                            longitud: lng,
+                            nombre: `Usuario ${userId.substring(0, 4)}`,
+                            timestamp: timestamp
+                        });
+                        
+                        // Centrar mapa en la ubicación
+                        map.setView([lat, lng], 15);
+                    },
+                    (error) => {
+                        alert('Error al obtener ubicación: ' + error.message);
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                alert('Tu navegador no soporta geolocalización');
+            }
+        });
+    </script>
+</body>
+</html>

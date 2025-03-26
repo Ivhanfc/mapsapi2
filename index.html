@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verificación por SMS</title>
+</head>
+<body>
+  <h1>Verificación por SMS</h1>
+
+  <!-- Formulario para ingresar el número de teléfono -->
+  <div id="form">
+    <label for="phoneNumber">Número de Teléfono:</label>
+    <input type="text" id="phoneNumber" placeholder="Ej. +521234567890">
+    <button onclick="sendCode()">Enviar Código</button>
+  </div>
+
+  <!-- Formulario para ingresar el código -->
+  <div id="verificationForm" style="display:none;">
+    <label for="verificationCode">Código de Verificación:</label>
+    <input type="text" id="verificationCode" placeholder="Ingresa el código">
+    <button onclick="verifyCode()">Verificar Código</button>
+  </div>
+
+  <script>
+    let verificationCode = '';
+
+    // Función para enviar el código de verificación
+    function sendCode() {
+      const phoneNumber = document.getElementById('phoneNumber').value;
+
+      // Enviar solicitud al backend para enviar SMS
+      fetch('https://mapsapi2.onrender.com/send-verification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phoneNumber })
+      })
+      .then(response => response.json())
+      .then(data => {
+        // Guardar el código de verificación que se envió
+        verificationCode = data.verificationCode;
+        console.log('Código enviado:', verificationCode);
+
+        // Mostrar formulario para ingresar el código
+        document.getElementById('form').style.display = 'none';
+        document.getElementById('verificationForm').style.display = 'block';
+      })
+      .catch(error => {
+        console.error('Error al enviar el SMS:', error);
+      });
+    }
+
+    // Función para verificar el código ingresado
+    function verifyCode() {
+      const enteredCode = document.getElementById('verificationCode').value;
+
+      if (enteredCode === verificationCode.toString()) {
+        alert('¡Código verificado correctamente!');
+        // Aquí puedes almacenar datos en Firebase si es necesario
+        // Ejemplo: guardar el número de teléfono en Firebase
+      } else {
+        alert('Código incorrecto. Intenta de nuevo.');
+      }
+    }
+  </script>
+</body>
+</html>
