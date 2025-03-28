@@ -3,265 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mapa Tijuana - Marcadores en Tiempo Real</title>
+    <title>Mapa Tijuana - Marcadores</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        body { margin: 0; padding: 0; }
         #map { width: 100%; height: 100vh; }
-        #controls {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
+        #btnGuardar { 
+            position: fixed; 
+            bottom: 20px; 
+            left: 20px; 
             z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        #btnGuardar {
-            padding: 12px 18px;
+            padding: 10px 15px;
             background: #3498db;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-weight: bold;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        }
-        #status {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            z-index: 1000;
-            background: rgba(255,255,255,0.9);
-            padding: 10px 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            max-width: 300px;
-        }
-        .marker-icon {
-            background: #e74c3c;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            display: block;
-            border: 3px solid #fff;
-            box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="status">Conectando a Firebase...</div>
-    <div id="controls">
-        <button id="btnGuardar">📍 Guardar Mi Ubicación</button>
-    </div>
+    <button id="btnGuardar">Guardar Mi Ubicación</button>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-firestore.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-auth.js"></script>
 
     <script>
-        // ========== CONFIGURACIÓN INICIAL ==========
+        // Configuración de Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBbR-O6hqk9gN2ohQuCCmV-vHiaEGhAL8s",
-            authDomain: "construyecercadeti.firebaseapp.com",
-            databaseURL: "https://construyecercadeti-default-rtdb.firebaseio.com",
-            projectId: "construyecercadeti",
-            storageBucket: "construyecercadeti.appspot.com",
-            messagingSenderId: "888808949632",
-            appId: "1:888808949632:web:677961b72573979c1b6365",
-            measurementId: "G-METG6NS3ZC"
+            databaseURL: "https://construyecercadeti-default-rtdb.firebaseio.com"
         };
 
-        // Inicializar Firebase
+        // Inicializar solo los servicios necesarios
         firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-        const fs = firebase.firestore();
-        const auth = firebase.auth();
-
-        // Elementos UI
-        const statusElement = document.getElementById('status');
-        const updateStatus = (message) => {
-            statusElement.textContent = message;
-            console.log(message);
-        };
-
-        // ========== MAPA Y MARCADORES ==========
-        // Icono personalizado
-        const customIcon = L.divIcon({
-            className: 'marker-icon',
-            iconSize: [26, 26]
-        });
+        const database = firebase.database();
 
         // Inicializar mapa
         const map = L.map('map').setView([32.5149, -117.0382], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-        updateStatus("Mapa inicializado");
+        // Variable para el nombre de usuario
+        let userName = prompt("Por favor ingresa tu nombre:", "Usuario");
 
         // Objeto para almacenar marcadores
-        const markers = new Map();
+        const markers = {};
 
-        // Función para crear/actualizar marcador
-        const updateMarker = (userId, lat, lng, nombre = 'Usuario') => {
-            // Validar coordenadas
-            if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
-                updateStatus(`Coordenadas inválidas para ${userId}: ${lat}, ${lng}`);
-                return;
-            }
-
-            // Si el marcador ya existe, actualizar posición
-            if (markers.has(userId)) {
-                markers.get(userId)
-                    .setLatLng([lat, lng])
-                    .setPopupContent(`<b>${nombre}</b><br>${new Date().toLocaleString()}`);
-                return;
-            }
-
-            // Crear nuevo marcador
-            const marker = L.marker([lat, lng], { icon: customIcon })
-                .addTo(map)
-                .bindPopup(`<b>${nombre}</b><br>${new Date().toLocaleString()}`);
-
-            markers.set(userId, marker);
-            updateStatus(`Marcador creado para ${userId}`);
-        };
-
-        // ========== AUTENTICACIÓN Y USUARIO ==========
-        let currentUser = null;
-
-        const initializeUser = async () => {
-            try {
-                updateStatus("Iniciando autenticación...");
-                
-                // Autenticación anónima
-                const { user } = await auth.signInAnonymously();
-                currentUser = user;
-                
-                // Verificar/crear documento en Firestore
-                const userRef = fs.collection('Usuarios').doc(user.uid);
-                const doc = await userRef.get();
-                
-                if (!doc.exists) {
-                    await userRef.set({
-                        nombre: `Usuario-${Math.random().toString(36).substr(2, 4)}`,
-                        creado: firebase.firestore.FieldValue.serverTimestamp()
-                    });
-                }
-                
-                updateStatus(`Usuario listo: ${user.uid}`);
-                return user.uid;
-            } catch (error) {
-                updateStatus(`Error de autenticación: ${error.message}`);
-                throw error;
-            }
-        };
-
-        // ========== DATOS EN TIEMPO REAL ==========
-        const setupRealtimeUpdates = () => {
-            updateStatus("Escuchando actualizaciones en tiempo real...");
+        // Escuchar cambios en la base de datos
+        database.ref('ubicaciones').on('value', (snapshot) => {
+            const data = snapshot.val();
             
-            db.ref('ubicaciones').on('value', async (snapshot) => {
-                const locations = snapshot.val();
-                
-                if (!locations) {
-                    updateStatus("No hay ubicaciones registradas aún");
-                    return;
-                }
-                
-                updateStatus(`Actualizando ${Object.keys(locations).length} marcadores...`);
-                
-                // Procesar cada ubicación
-                for (const [userId, location] of Object.entries(locations)) {
-                    try {
-                        // Obtener nombre del usuario
-                        let nombre = 'Usuario';
-                        const userDoc = await fs.collection('Usuarios').doc(userId).get();
-                        if (userDoc.exists) {
-                            nombre = userDoc.data().nombre || nombre;
-                        }
-                        
-                        // Actualizar marcador
-                        updateMarker(
-                            userId, 
-                            location.latitud, 
-                            location.longitud, 
-                            nombre
-                        );
-                    } catch (error) {
-                        updateStatus(`Error al procesar ${userId}: ${error.message}`);
-                    }
-                }
+            // Limpiar marcadores antiguos
+            Object.keys(markers).forEach(key => {
+                map.removeLayer(markers[key]);
+                delete markers[key];
             });
-        };
 
-        // ========== GUARDAR UBICACIÓN ==========
-        document.getElementById('btnGuardar').addEventListener('click', async () => {
-            if (!navigator.geolocation) {
-                updateStatus("Geolocalización no soportada");
-                alert("Tu navegador no soporta geolocalización");
-                return;
+            // Añadir nuevos marcadores
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    const ubicacion = data[key];
+                    markers[key] = L.marker([ubicacion.latitud, ubicacion.longitud])
+                        .addTo(map)
+                        .bindPopup(`<b>${ubicacion.nombre}</b>`);
+                });
             }
-            
-            if (!currentUser) {
-                try {
-                    await initializeUser();
-                } catch {
-                    return; // Error ya mostrado en initializeUser
-                }
-            }
-            
-            updateStatus("Obteniendo ubicación actual...");
-            
-            navigator.geolocation.getCurrentPosition(
-                async (position) => {
-                    const { latitude: lat, longitude: lng } = position.coords;
-                    const timestamp = Date.now();
-                    
-                    try {
-                        // Guardar en Realtime Database
-                        await db.ref(`ubicaciones/${currentUser.uid}`).set({
-                            latitud: lat,
-                            longitud: lng,
-                            timestamp: timestamp
-                        });
-                        
-                        // Actualizar Firestore
-                        await fs.collection('Usuarios').doc(currentUser.uid).update({
-                            ultimaUbicacion: {
-                                coordenadas: new firebase.firestore.GeoPoint(lat, lng),
-                                timestamp: timestamp
-                            }
-                        });
-                        
-                        updateStatus(`Ubicación guardada: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-                        map.setView([lat, lng], 15);
-                    } catch (error) {
-                        updateStatus(`Error al guardar: ${error.message}`);
-                    }
-                },
-                (error) => {
-                    updateStatus(`Error de geolocalización: ${error.message}`);
-                    alert(`No se pudo obtener ubicación: ${error.message}`);
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
         });
 
-        // ========== INICIALIZACIÓN ==========
-        (async () => {
-            try {
-                await initializeUser();
-                setupRealtimeUpdates();
-                updateStatus("Sistema listo. Puedes guardar tu ubicación.");
-            } catch (error) {
-                updateStatus("Error al iniciar la aplicación. Recarga la página.");
+        // Función para guardar ubicación
+        document.getElementById('btnGuardar').addEventListener('click', () => {
+            if (!navigator.geolocation) {
+                alert('Tu navegador no soporta geolocalización');
+                return;
             }
-        })();
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    // Crear ID simple basado en timestamp
+                    const userId = 'user_' + Date.now();
+                    
+                    // Guardar en Firebase
+                    database.ref('ubicaciones/' + userId).set({
+                        latitud: lat,
+                        longitud: lng,
+                        nombre: userName || 'Usuario',
+                        timestamp: Date.now()
+                    });
+                    
+                    // Centrar mapa
+                    map.setView([lat, lng], 15);
+                },
+                (error) => {
+                    alert('Error al obtener ubicación: ' + error.message);
+                }
+            );
+        });
     </script>
 </body>
 </html>
