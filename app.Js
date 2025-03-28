@@ -9,15 +9,15 @@ const PORT = process.env.PORT || 10000;
 
 // Configuración CORS para desarrollo y producción
 const corsOptions = {
-  origin: '*', // Permite todas las origenes (ajusta en producción)
-  methods: ['GET', 'POST', 'OPTIONS'],
+    origin: ['https://ivhanfc.github.io', 'http://localhost:10000'],
+    methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 200
 };
 
 // Middlewares
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Habilitar pre-flight para todas las rutas
+app.options('*', cors(corsOptions));
 app.use(bodyParser.json());
 
 // Configuración de Twilio
