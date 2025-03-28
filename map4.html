@@ -6,42 +6,55 @@
     <title>Mapa Tijuana - Marcadores en Tiempo Real</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; }
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
         #map { width: 100%; height: 100vh; }
-        #btnGuardar { 
-            position: fixed; 
-            bottom: 20px; 
-            right: 20px; 
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
             z-index: 1000;
-            padding: 10px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        #btnGuardar {
+            padding: 12px 18px;
             background: #3498db;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        #debugPanel {
+        #status {
             position: fixed;
             top: 10px;
             left: 10px;
             z-index: 1000;
-            background: white;
-            padding: 10px;
+            background: rgba(255,255,255,0.9);
+            padding: 10px 15px;
             border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             max-width: 300px;
-            max-height: 200px;
-            overflow: auto;
+        }
+        .marker-icon {
+            background: #e74c3c;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: block;
+            border: 3px solid #fff;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
-    <div id="debugPanel">
-        <h3>Diagnóstico</h3>
-        <div id="debugInfo">Inicializando...</div>
+    <div id="status">Conectando a Firebase...</div>
+    <div id="controls">
+        <button id="btnGuardar">📍 Guardar Mi Ubicación</button>
     </div>
-    <button id="btnGuardar">Guardar Mi Ubicación</button>
 
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-app.js"></script>
@@ -50,7 +63,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.2.3/firebase-auth.js"></script>
 
     <script>
-        // Configuración de Firebase
+        // ========== CONFIGURACIÓN INICIAL ==========
         const firebaseConfig = {
             apiKey: "AIzaSyBbR-O6hqk9gN2ohQuCCmV-vHiaEGhAL8s",
             authDomain: "construyecercadeti.firebaseapp.com",
@@ -64,180 +77,190 @@
 
         // Inicializar Firebase
         firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        const firestore = firebase.firestore();
+        const db = firebase.database();
+        const fs = firebase.firestore();
         const auth = firebase.auth();
 
-        // Debugger
-        function debugLog(message) {
-            const debugDiv = document.getElementById('debugInfo');
-            debugDiv.innerHTML += `<p>${new Date().toLocaleTimeString()}: ${message}</p>`;
+        // Elementos UI
+        const statusElement = document.getElementById('status');
+        const updateStatus = (message) => {
+            statusElement.textContent = message;
             console.log(message);
-        }
+        };
+
+        // ========== MAPA Y MARCADORES ==========
+        // Icono personalizado
+        const customIcon = L.divIcon({
+            className: 'marker-icon',
+            iconSize: [26, 26]
+        });
 
         // Inicializar mapa
         const map = L.map('map').setView([32.5149, -117.0382], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        debugLog("Mapa inicializado correctamente");
+        updateStatus("Mapa inicializado");
 
         // Objeto para almacenar marcadores
-        const markers = {};
-        let userId = null;
+        const markers = new Map();
 
-        // Función para crear marcador con verificación
-        function createMarker(userId, lat, lng, nombre) {
-            debugLog(`Intentando crear marcador para ${userId} en (${lat}, ${lng})`);
-            
-            // Verificar coordenadas válidas
-            if (isNaN(lat) || isNaN(lng)) {
-                debugLog(`Coordenadas inválidas: ${lat}, ${lng}`);
+        // Función para crear/actualizar marcador
+        const updateMarker = (userId, lat, lng, nombre = 'Usuario') => {
+            // Validar coordenadas
+            if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+                updateStatus(`Coordenadas inválidas para ${userId}: ${lat}, ${lng}`);
                 return;
             }
 
-            // Eliminar marcador existente si hay uno
-            if (markers[userId]) {
-                map.removeLayer(markers[userId]);
-                debugLog(`Marcador existente eliminado para ${userId}`);
+            // Si el marcador ya existe, actualizar posición
+            if (markers.has(userId)) {
+                markers.get(userId)
+                    .setLatLng([lat, lng])
+                    .setPopupContent(`<b>${nombre}</b><br>${new Date().toLocaleString()}`);
+                return;
             }
 
             // Crear nuevo marcador
-            markers[userId] = L.marker([lat, lng])
+            const marker = L.marker([lat, lng], { icon: customIcon })
                 .addTo(map)
-                .bindPopup(`<b>${nombre || 'Usuario'}</b><br>Usuario ID: ${userId}`);
-            
-            debugLog(`Marcador creado exitosamente para ${userId}`);
-        }
+                .bindPopup(`<b>${nombre}</b><br>${new Date().toLocaleString()}`);
 
-        // Inicializar usuario
-        async function initializeUser() {
+            markers.set(userId, marker);
+            updateStatus(`Marcador creado para ${userId}`);
+        };
+
+        // ========== AUTENTICACIÓN Y USUARIO ==========
+        let currentUser = null;
+
+        const initializeUser = async () => {
             try {
-                debugLog("Iniciando autenticación...");
+                updateStatus("Iniciando autenticación...");
                 
                 // Autenticación anónima
-                const userCredential = await auth.signInAnonymously();
-                userId = userCredential.user.uid;
-                debugLog(`Usuario autenticado: ${userId}`);
-
+                const { user } = await auth.signInAnonymously();
+                currentUser = user;
+                
                 // Verificar/crear documento en Firestore
-                const userRef = firestore.collection('Usuarios').doc(userId);
+                const userRef = fs.collection('Usuarios').doc(user.uid);
                 const doc = await userRef.get();
                 
                 if (!doc.exists) {
                     await userRef.set({
-                        nombre: 'Usuario ' + Math.random().toString(36).substr(2, 5),
-                        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp()
+                        nombre: `Usuario-${Math.random().toString(36).substr(2, 4)}`,
+                        creado: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    debugLog("Nuevo usuario creado en Firestore");
                 }
-
-                return userId;
+                
+                updateStatus(`Usuario listo: ${user.uid}`);
+                return user.uid;
             } catch (error) {
-                debugLog(`Error en autenticación: ${error.message}`);
-                // Fallback a ID local
-                userId = 'local_' + Math.random().toString(36).substr(2, 9);
-                debugLog(`Usando ID local: ${userId}`);
-                return userId;
+                updateStatus(`Error de autenticación: ${error.message}`);
+                throw error;
             }
-        }
+        };
 
-        // Escuchar cambios en la base de datos
-        function setupDatabaseListener() {
-            debugLog("Configurando listener de base de datos...");
+        // ========== DATOS EN TIEMPO REAL ==========
+        const setupRealtimeUpdates = () => {
+            updateStatus("Escuchando actualizaciones en tiempo real...");
             
-            database.ref('ubicaciones').on('value', async (snapshot) => {
-                const data = snapshot.val();
-                debugLog(`Datos recibidos: ${JSON.stringify(data)}`);
-
-                if (!data) {
-                    debugLog("No hay datos de ubicaciones");
+            db.ref('ubicaciones').on('value', async (snapshot) => {
+                const locations = snapshot.val();
+                
+                if (!locations) {
+                    updateStatus("No hay ubicaciones registradas aún");
                     return;
                 }
-
-                for (const [key, ubicacion] of Object.entries(data)) {
+                
+                updateStatus(`Actualizando ${Object.keys(locations).length} marcadores...`);
+                
+                // Procesar cada ubicación
+                for (const [userId, location] of Object.entries(locations)) {
                     try {
                         // Obtener nombre del usuario
                         let nombre = 'Usuario';
-                        const userDoc = await firestore.collection('Usuarios').doc(key).get();
+                        const userDoc = await fs.collection('Usuarios').doc(userId).get();
                         if (userDoc.exists) {
-                            nombre = userDoc.data().nombre || 'Usuario';
+                            nombre = userDoc.data().nombre || nombre;
                         }
-
-                        // Crear/actualizar marcador
-                        createMarker(key, ubicacion.latitud, ubicacion.longitud, nombre);
+                        
+                        // Actualizar marcador
+                        updateMarker(
+                            userId, 
+                            location.latitud, 
+                            location.longitud, 
+                            nombre
+                        );
                     } catch (error) {
-                        debugLog(`Error procesando marcador ${key}: ${error.message}`);
+                        updateStatus(`Error al procesar ${userId}: ${error.message}`);
                     }
                 }
-            }, (error) => {
-                debugLog(`Error en listener: ${error.message}`);
             });
-        }
+        };
 
-        // Guardar ubicación
+        // ========== GUARDAR UBICACIÓN ==========
         document.getElementById('btnGuardar').addEventListener('click', async () => {
-            debugLog("Botón Guardar clickeado");
-            
             if (!navigator.geolocation) {
-                debugLog("Geolocalización no soportada");
-                alert('Tu navegador no soporta geolocalización');
+                updateStatus("Geolocalización no soportada");
+                alert("Tu navegador no soporta geolocalización");
                 return;
             }
-
-            if (!userId) {
-                userId = await initializeUser();
+            
+            if (!currentUser) {
+                try {
+                    await initializeUser();
+                } catch {
+                    return; // Error ya mostrado en initializeUser
+                }
             }
-
+            
+            updateStatus("Obteniendo ubicación actual...");
+            
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
+                    const { latitude: lat, longitude: lng } = position.coords;
                     const timestamp = Date.now();
                     
-                    debugLog(`Obtenida ubicación: ${lat}, ${lng}`);
-
                     try {
                         // Guardar en Realtime Database
-                        await database.ref(`ubicaciones/${userId}`).set({
+                        await db.ref(`ubicaciones/${currentUser.uid}`).set({
                             latitud: lat,
                             longitud: lng,
                             timestamp: timestamp
                         });
-                        debugLog("Ubicación guardada en RTDB");
-
+                        
                         // Actualizar Firestore
-                        await firestore.collection('Usuarios').doc(userId).update({
+                        await fs.collection('Usuarios').doc(currentUser.uid).update({
                             ultimaUbicacion: {
-                                latitud: lat,
-                                longitud: lng,
+                                coordenadas: new firebase.firestore.GeoPoint(lat, lng),
                                 timestamp: timestamp
                             }
                         });
-                        debugLog("Ubicación actualizada en Firestore");
-
-                        // Centrar mapa
+                        
+                        updateStatus(`Ubicación guardada: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
                         map.setView([lat, lng], 15);
-                        debugLog("Mapa centrado en nueva ubicación");
                     } catch (error) {
-                        debugLog(`Error al guardar ubicación: ${error.message}`);
+                        updateStatus(`Error al guardar: ${error.message}`);
                     }
                 },
                 (error) => {
-                    debugLog(`Error de geolocalización: ${error.message}`);
-                    alert('Error al obtener ubicación: ' + error.message);
+                    updateStatus(`Error de geolocalización: ${error.message}`);
+                    alert(`No se pudo obtener ubicación: ${error.message}`);
                 },
-                { enableHighAccuracy: true }
+                { enableHighAccuracy: true, timeout: 10000 }
             );
         });
 
-        // Inicialización completa
-        (async function init() {
-            debugLog("Iniciando aplicación...");
-            await initializeUser();
-            setupDatabaseListener();
-            debugLog("Aplicación lista");
+        // ========== INICIALIZACIÓN ==========
+        (async () => {
+            try {
+                await initializeUser();
+                setupRealtimeUpdates();
+                updateStatus("Sistema listo. Puedes guardar tu ubicación.");
+            } catch (error) {
+                updateStatus("Error al iniciar la aplicación. Recarga la página.");
+            }
         })();
     </script>
 </body>
