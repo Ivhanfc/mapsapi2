@@ -183,6 +183,9 @@
             .then(data => {
                 if (data.status === 'success') {
                     document.getElementById('status').innerText = "¡Código verificado correctamente!";
+                    window.location.href = "map4.html"; // Cambia este enlace por el archivo HTML que quieras abrir
+ 
+
                     document.getElementById('status').classList.add('success');
                 } else {
                     document.getElementById('status').innerText = "Código incorrecto. Intenta de nuevo.";
