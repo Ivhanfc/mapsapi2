@@ -49,8 +49,14 @@ app.post('/send-verification', async (req, res) => {
         res.json({ 
             status: 'success',
             message: 'Código enviado correctamente',
+           
             verificationSid: verification.sid
         });
+        // Log para depuración
+        console.log('Código enviado:', verification.sid);
+        console.log(`Código enviado a ${phoneNumber}`);
+        console.log(verification.status);
+        console.log(verification.code);
     } catch (error) {
         console.error('Error en send-verification:', error);
         res.status(500).json({ 
